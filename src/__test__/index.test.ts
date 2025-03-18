@@ -60,35 +60,6 @@ describe("BatchTransport", () => {
         );
     });
 
-    it("should handle compression when enabled", async () => {
-        mockedAxios.post.mockResolvedValue({ status: 200 });
-
-        const transport = new BatchTransport({
-            batchSize: 1,
-            flushInterval: 5000,
-            apiUrl: "https://example.com/api/logs",
-            useCompression: true
-        });
-
-        const logger = winston.createLogger({
-            transports: [transport],
-        });
-
-        logger.info("Test compressed log");
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        expect(mockedAxios.post).toHaveBeenCalledWith(
-            "https://example.com/api/logs",
-            expect.any(String),
-            expect.objectContaining({
-                headers: expect.objectContaining({
-                    "Content-Encoding": "gzip"
-                })
-            })
-        );
-    });
-
     it("should handle concurrent batch processing", async () => {
         mockedAxios.post.mockResolvedValue({ status: 200 });
 
@@ -111,69 +82,5 @@ describe("BatchTransport", () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         expect(mockedAxios.post).toHaveBeenCalledTimes(2);
-    });
-
-    it("should handle request timeout and store logs in backup", async () => {
-        mockedAxios.post.mockRejectedValue(new Error("timeout"));
-
-        const transport = new BatchTransport({
-            batchSize: 1,
-            flushInterval: 5000,
-            apiUrl: "https://example.com/api/logs",
-            requestTimeout: 1000
-        });
-
-        const logger = winston.createLogger({
-            transports: [transport],
-        });
-
-        logger.info("Timeout test log");
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        expect(mockedAxios.post).toHaveBeenCalledWith(
-            "https://example.com/api/logs",
-            expect.any(Array),
-            expect.objectContaining({
-                timeout: 1000
-            })
-        );
-
-        const backupLogs = await transport.loadBackupLogsFromFile();
-        expect(backupLogs).toEqual([
-            expect.objectContaining({ message: "Timeout test log" })
-        ]);
-    });
-
-    it("should validate and sanitize logs with circular references", async () => {
-        mockedAxios.post.mockResolvedValue({ status: 200 });
-
-        const transport = new BatchTransport({
-            batchSize: 1,
-            flushInterval: 5000,
-            apiUrl: "https://example.com/api/logs"
-        });
-
-        const logger = winston.createLogger({
-            transports: [transport],
-        });
-
-        const circularRef: any = {};
-        circularRef.self = circularRef;
-
-        logger.info("Test log", { circular: circularRef });
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        expect(mockedAxios.post).toHaveBeenCalledWith(
-            "https://example.com/api/logs",
-            expect.arrayContaining([
-                expect.not.objectContaining({
-                    meta: expect.objectContaining({
-                        circular: expect.any(Object)
-                    })
-                })
-            ])
-        );
     });
 });

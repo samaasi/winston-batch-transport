@@ -1,14 +1,17 @@
 {
   "name": "winston-batch-transport",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A robust Winston transport that batches logs and sends them to a specified API endpoint with support for retries, compression, and concurrent batch processing",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "test": "jest"
+    "build": "tsc",
+    "test": "jest",
+    "prepublishOnly": "npm run test && npm run build"
   },
-  "keywords": [],
+  "keywords": ["winston", "winston-transport", "logging", "batch", "compression", "retry"],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "axios": "^1.7.9",
     "winston": "^3.17.0",
