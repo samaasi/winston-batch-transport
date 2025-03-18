@@ -3,7 +3,6 @@
   <component name="ErlangCompilerOptions">
     <useRebarCompiler>true</useRebarCompiler>
   </component>
-  <component name="GOROOT" url="file://$PROJECT_DIR$/../../../Program Files/Go" />
   <component name="KubernetesApiProvider"><![CDATA[{}]]></component>
   <component name="Make.Settings">
     <option name="useCygwin" value="true" />

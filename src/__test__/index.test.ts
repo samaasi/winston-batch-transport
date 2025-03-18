@@ -1,7 +1,5 @@
 import axios from "axios";
-import fs from "fs/promises";
 import winston from "winston";
-import zlib from "zlib";
 import BatchTransport from "../index";
 
 jest.mock("axios");
