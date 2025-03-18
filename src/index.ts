@@ -1,6 +1,10 @@
+import zlib from "zlib";
 import axios from "axios";
 import fs from "fs/promises";
+import { promisify } from "util";
 import TransportStream from "winston-transport";
+
+const gzip = promisify(zlib.gzip);
 
 interface LogEntry {
     level: string;
@@ -12,9 +16,13 @@ interface BatchTransportOptions extends TransportStream.TransportStreamOptions {
     batchSize: number;
     flushInterval: number;
     apiUrl: string;
+    apiKey?: string;
     retryLimit?: number;
     backoffFactor?: number;
     backupFilePath?: string;
+    requestTimeout?: number;
+    maxConcurrentBatches?: number;
+    useCompression?: boolean;
 }
 
 class BatchTransport extends TransportStream {
@@ -26,16 +34,25 @@ class BatchTransport extends TransportStream {
     private readonly retryLimit: number;
     private readonly backoffFactor: number;
     private readonly backupFilePath: string;
+    private readonly requestTimeout: number;
+    private readonly maxConcurrentBatches: number;
+    private readonly useCompression: boolean;
+    private readonly apiKey?: string;
     private flushTimer: NodeJS.Timeout | null = null;
+    private activeBatches: number = 0;
 
     constructor(opts: BatchTransportOptions) {
         super(opts);
         this.batchSize = opts.batchSize;
         this.flushInterval = opts.flushInterval;
         this.apiUrl = opts.apiUrl;
+        this.apiKey = opts.apiKey;
         this.retryLimit = opts.retryLimit || 3;
         this.backoffFactor = opts.backoffFactor || 1000;
         this.backupFilePath = opts.backupFilePath || "./unsent-logs.json";
+        this.requestTimeout = opts.requestTimeout || 5000;
+        this.maxConcurrentBatches = opts.maxConcurrentBatches || 3;
+        this.useCompression = opts.useCompression || false;
 
         this.startFlushTimer();
         this.loadBackupLogs();
@@ -61,21 +78,75 @@ class BatchTransport extends TransportStream {
         this.flushTimer = setInterval(() => this.flushLogs(), this.flushInterval);
     }
 
+    private validateLog(log: LogEntry): boolean {
+        return (
+            typeof log.level === 'string' &&
+            typeof log.message === 'string' &&
+            typeof log.timestamp === 'string' &&
+            new Date(log.timestamp).toString() !== 'Invalid Date'
+        );
+    }
+
+    private sanitizeLog(log: LogEntry): LogEntry {
+        return {
+            level: String(log.level).slice(0, 32),
+            message: String(log.message).slice(0, 32768),
+            timestamp: new Date(log.timestamp).toISOString()
+        };
+    }
+
     private async flushLogs() {
-        if (this.logQueue.length === 0) return;
+        if (this.logQueue.length === 0 || this.activeBatches >= this.maxConcurrentBatches) return;
 
-        const logsToSend = [...this.logQueue];
-        this.logQueue = [];
+        const batchSize = Math.min(this.batchSize, this.logQueue.length);
+        const logsToSend = this.logQueue.splice(0, batchSize);
 
+        const validatedLogs = logsToSend
+            .filter(log => this.validateLog(log))
+            .map(log => this.sanitizeLog(log));
+
+        if (validatedLogs.length === 0) return;
+
+        this.activeBatches++;
         try {
-            await this.sendLogs(logsToSend);
+            await this.sendLogs(validatedLogs);
         } catch (error) {
-            this.retryQueue.push(...logsToSend);
+            this.retryQueue.push(...validatedLogs);
+        } finally {
+            this.activeBatches--;
         }
     }
 
     private async sendLogs(logs: LogEntry[]) {
-        await axios.post(this.apiUrl, logs, { headers: { "Content-Type": "application/json" } });
+        let payload = logs;
+        let headers: Record<string, string> = { "Content-Type": "application/json" };
+
+        if (this.apiKey) {
+            headers["Authorization"] = `Bearer ${this.apiKey}`;
+        }
+
+        if (this.useCompression) {
+            const compressedData = await gzip(JSON.stringify(logs));
+            payload = compressedData as any;
+            headers["Content-Type"] = "application/json";
+            headers["Content-Encoding"] = "gzip";
+        }
+
+        try {
+            await axios.post(this.apiUrl, payload, {
+                headers,
+                timeout: this.requestTimeout
+            });
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 401) {
+                    throw new Error("Unauthorized: Invalid or missing API key");
+                } else if (error.response?.status === 403) {
+                    throw new Error("Forbidden: Insufficient permissions with provided API key");
+                }
+            }
+            throw error;
+        }
     }
 
     private async retryFailedLogs() {
