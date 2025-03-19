@@ -1,4 +1,6 @@
 src/
+.idea/
+vscode/
 jest.config.js
 tsconfig.json
 *.test.ts
