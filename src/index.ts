@@ -23,10 +23,11 @@ interface BatchTransportOptions extends TransportStream.TransportStreamOptions {
     requestTimeout?: number;
     maxConcurrentBatches?: number;
     useCompression?: boolean;
+    initialized?: boolean;
 }
 
 class BatchTransport extends TransportStream {
-    public logQueue: LogEntry[] = [];
+    private logQueue: LogEntry[] = [];
     private retryQueue: LogEntry[] = [];
     private readonly batchSize: number;
     private readonly flushInterval: number;
@@ -40,6 +41,8 @@ class BatchTransport extends TransportStream {
     private readonly apiKey?: string;
     private flushTimer: NodeJS.Timeout | null = null;
     private activeBatches: number = 0;
+    private initialized: boolean;
+    private backupWriteInProgress: boolean = false;
 
     constructor(opts: BatchTransportOptions) {
         super(opts);
@@ -53,9 +56,16 @@ class BatchTransport extends TransportStream {
         this.requestTimeout = opts.requestTimeout || 5000;
         this.maxConcurrentBatches = opts.maxConcurrentBatches || 3;
         this.useCompression = opts.useCompression || false;
+        this.initialized = opts.initialized || false;
 
         this.startFlushTimer();
-        this.loadBackupLogs();
+    }
+
+    public async init() {
+        if (!this.initialized) {
+            await this.loadBackupLogs();
+            this.initialized = true;
+        }
     }
 
     log(info: any, callback: () => void) {
@@ -67,7 +77,7 @@ class BatchTransport extends TransportStream {
 
         this.logQueue.push(logEntry);
 
-        if (this.logQueue.length >= this.batchSize) {
+        if (this.initialized && this.logQueue.length >= this.batchSize) {
             this.flushLogs();
         }
 
@@ -128,7 +138,7 @@ class BatchTransport extends TransportStream {
         if (this.useCompression) {
             const compressedData = await gzip(JSON.stringify(logs));
             payload = compressedData as any;
-            headers["Content-Type"] = "application/json";
+            headers["Content-Type"] = "application/octet-stream";
             headers["Content-Encoding"] = "gzip";
         }
 
@@ -143,45 +153,66 @@ class BatchTransport extends TransportStream {
                     throw new Error("Unauthorized: Invalid or missing API key");
                 } else if (error.response?.status === 403) {
                     throw new Error("Forbidden: Insufficient permissions with provided API key");
+                } else if (error.response?.status === 400 || error.response?.status === 404) {
+                   throw new Error(`Permanent error: ${error.response.status} - ${error.message}`);
                 }
             }
             throw error;
         }
     }
 
-    private async retryFailedLogs() {
-        if (this.retryQueue.length === 0) return;
+     private async retryFailedLogs() {
+         if (this.retryQueue.length === 0) return;
 
-        const logsToRetry = [...this.retryQueue];
-        this.retryQueue = [];
+         const logsToRetry = [...this.retryQueue];
+         this.retryQueue = [];
 
-        for (const log of logsToRetry) {
-            let success = false;
-            for (let attempt = 0; attempt < this.retryLimit; attempt++) {
-                try {
-                    const backoff = this.backoffFactor * Math.pow(2, attempt);
-                    await new Promise((resolve) => setTimeout(resolve, backoff));
-                    await this.sendLogs([log]);
-                    success = true;
-                    break;
-                } catch (error) {}
-            }
-            if (!success) {
-                await this.backupFailedLog(log);
-            }
-        }
-    }
+         const batchSize = this.batchSize;
+         for (let i = 0; i < logsToRetry.length; i += batchSize) {
+             const batch = logsToRetry.slice(i, i + batchSize);
+             let success = false;
+             for (let attempt = 0; attempt < this.retryLimit; attempt++) {
+                 try {
+                     const backoff = this.backoffFactor * Math.pow(2, attempt);
+                     await new Promise((resolve) => setTimeout(resolve, backoff));
+                     await this.sendLogs(batch);
+                     success = true;
+                     break;
+                 } catch (error: any) {
+                     if (error.message.startsWith("Unauthorized") || error.message.startsWith("Forbidden") || error.message.startsWith("Permanent error")) {
+                         for (const log of batch) {
+                             await this.backupFailedLog(log);
+                         }
+                         success = true; // Treat as success for this batch, as it's backed up and won't be retried
+                         break;
+                     }
+                 }
+             }
+             if (!success) {
+                 for (const log of batch) {
+                     await this.backupFailedLog(log);
+                 }
+             }
+         }
+     }
 
-    private async backupFailedLog(log: LogEntry) {
-        const existingLogs = await this.loadBackupLogsFromFile();
-        existingLogs.push(log);
-        await fs.writeFile(this.backupFilePath, JSON.stringify(existingLogs, null, 2));
-    }
+     private async backupFailedLog(log: LogEntry) {
+         while (this.backupWriteInProgress) {
+             await new Promise(resolve => setTimeout(resolve, 100));
+         }
+         this.backupWriteInProgress = true;
+         try {
+             const existingLogs = await this.loadBackupLogsFromFile();
+             existingLogs.push(log);
+             await fs.writeFile(this.backupFilePath, JSON.stringify(existingLogs, null, 2));
+         } finally {
+             this.backupWriteInProgress = false;
+         }
+     }
 
     private async loadBackupLogs() {
         const backupLogs = await this.loadBackupLogsFromFile();
         this.logQueue.push(...backupLogs);
-        await fs.writeFile(this.backupFilePath, JSON.stringify([]));
     }
 
     public async loadBackupLogsFromFile(): Promise<LogEntry[]> {
@@ -193,10 +224,10 @@ class BatchTransport extends TransportStream {
         }
     }
 
-    close() {
+    public async close() {
         if (this.flushTimer) clearInterval(this.flushTimer);
-        this.flushLogs();
-        this.retryFailedLogs();
+        await this.flushLogs();
+        await this.retryFailedLogs();
     }
 }
 
