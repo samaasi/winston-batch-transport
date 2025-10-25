@@ -22,7 +22,10 @@ jobs:
         run: npm install
 
       - name: Build package
-        run: npm run build # Assuming you have a build script
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
 
       - name: Publish to npm
         run: npm publish
