@@ -131,6 +131,17 @@ Adds a log entry to the queue. Called internally by Winston.
 #### `close(): Promise<void>`
 Asynchronously cleans up resources and ensures all pending logs are processed before shutdown.
 
+**Example Usage:**
+
+```typescript
+// In your application shutdown logic
+process.on('beforeExit', async () => {
+  console.log('Application is shutting down. Flushing remaining logs...');
+  await batchTransportInstance.close();
+  console.log('All logs flushed. Goodbye!');
+});
+```
+
 ## Error Handling
 
 The transport handles errors in multiple ways:
