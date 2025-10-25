@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
-import BatchTransport from './index';
+import BatchTransport from '../index';
 
 jest.mock('axios', () => ({
   post: jest.fn(),
