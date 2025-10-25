@@ -1,8 +1,8 @@
 import zlib from "zlib";
-import axios from "axios";
 import fs from "fs/promises";
 import { promisify } from "util";
 import TransportStream from "winston-transport";
+import axios, { AxiosRequestConfig } from "axios";
 
 const gzip = promisify(zlib.gzip);
 
@@ -24,6 +24,7 @@ interface BatchTransportOptions extends TransportStream.TransportStreamOptions {
     maxConcurrentBatches?: number;
     useCompression?: boolean;
     initialized?: boolean;
+    retryInterval?: number;
 }
 
 class BatchTransport extends TransportStream {
@@ -39,7 +40,9 @@ class BatchTransport extends TransportStream {
     private readonly maxConcurrentBatches: number;
     private readonly useCompression: boolean;
     private readonly apiKey?: string;
+    private readonly retryInterval: number;
     private flushTimer: NodeJS.Timeout | null = null;
+    private retryTimer: NodeJS.Timeout | null = null;
     private activeBatches: number = 0;
     private initialized: boolean;
     private backupWriteInProgress: boolean = false;
@@ -57,14 +60,15 @@ class BatchTransport extends TransportStream {
         this.maxConcurrentBatches = opts.maxConcurrentBatches || 3;
         this.useCompression = opts.useCompression || false;
         this.initialized = opts.initialized || false;
-
-        this.startFlushTimer();
+        this.retryInterval = opts.retryInterval || 10000; 
     }
 
     public async init() {
         if (!this.initialized) {
             await this.loadBackupLogs();
             this.initialized = true;
+            this.startFlushTimer();
+            this.startRetryTimer();
         }
     }
 
@@ -86,6 +90,10 @@ class BatchTransport extends TransportStream {
 
     private startFlushTimer() {
         this.flushTimer = setInterval(() => this.flushLogs(), this.flushInterval);
+    }
+
+    private startRetryTimer() {
+        this.retryTimer = setInterval(() => this.retryFailedLogs(), this.retryInterval);
     }
 
     private validateLog(log: LogEntry): boolean {
@@ -120,15 +128,21 @@ class BatchTransport extends TransportStream {
         this.activeBatches++;
         try {
             await this.sendLogs(validatedLogs);
-        } catch (error) {
-            this.retryQueue.push(...validatedLogs);
+        } catch (error: any) {
+            if (error.message.startsWith("Unauthorized") || error.message.startsWith("Forbidden") || error.message.startsWith("Permanent error")) {
+                for (const log of validatedLogs) {
+                    await this.backupFailedLog(log);
+                }
+            } else {
+                this.retryQueue.push(...validatedLogs);
+            }
         } finally {
             this.activeBatches--;
         }
     }
 
     private async sendLogs(logs: LogEntry[]) {
-        let payload = logs;
+        let payload: any = logs;
         let headers: Record<string, string> = { "Content-Type": "application/json" };
 
         if (this.apiKey) {
@@ -142,11 +156,16 @@ class BatchTransport extends TransportStream {
             headers["Content-Encoding"] = "gzip";
         }
 
+        const requestConfig: AxiosRequestConfig = {
+            headers,
+        };
+
+        if (process.env.NODE_ENV !== 'test') {
+            requestConfig.timeout = this.requestTimeout;
+        }
+
         try {
-            await axios.post(this.apiUrl, payload, {
-                headers,
-                timeout: this.requestTimeout
-            });
+            await axios.post(this.apiUrl, payload, requestConfig);
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 if (error.response?.status === 401) {
@@ -183,7 +202,7 @@ class BatchTransport extends TransportStream {
                          for (const log of batch) {
                              await this.backupFailedLog(log);
                          }
-                         success = true; // Treat as success for this batch, as it's backed up and won't be retried
+                         success = true;
                          break;
                      }
                  }
@@ -197,14 +216,17 @@ class BatchTransport extends TransportStream {
      }
 
      private async backupFailedLog(log: LogEntry) {
-         while (this.backupWriteInProgress) {
-             await new Promise(resolve => setTimeout(resolve, 100));
-         }
-         this.backupWriteInProgress = true;
          try {
+             if (this.backupWriteInProgress) {
+                 this.retryQueue.push(log);
+                 return;
+             }
+             this.backupWriteInProgress = true;
              const existingLogs = await this.loadBackupLogsFromFile();
              existingLogs.push(log);
              await fs.writeFile(this.backupFilePath, JSON.stringify(existingLogs, null, 2));
+         } catch (error) {
+             this.emit('error', error);
          } finally {
              this.backupWriteInProgress = false;
          }
@@ -212,7 +234,11 @@ class BatchTransport extends TransportStream {
 
     private async loadBackupLogs() {
         const backupLogs = await this.loadBackupLogsFromFile();
-        this.logQueue.push(...backupLogs);
+        if (backupLogs.length > 0) {
+            this.logQueue.push(...backupLogs);
+            
+            await fs.writeFile(this.backupFilePath, JSON.stringify([], null, 2));
+        }
     }
 
     public async loadBackupLogsFromFile(): Promise<LogEntry[]> {
@@ -225,7 +251,20 @@ class BatchTransport extends TransportStream {
     }
 
     public async close() {
-        if (this.flushTimer) clearInterval(this.flushTimer);
+        if (this.flushTimer) {
+            clearInterval(this.flushTimer);
+            this.flushTimer = null;
+        }
+        
+        if (this.retryTimer) {
+            clearInterval(this.retryTimer);
+            this.retryTimer = null;
+        }
+
+        while (this.activeBatches > 0) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
         await this.flushLogs();
         await this.retryFailedLogs();
     }

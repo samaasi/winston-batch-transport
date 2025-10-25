@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "moduleResolution": "node16",
+    "isolatedModules": true,
     "resolveJsonModule": true,
     "rootDir": "./src"
 
