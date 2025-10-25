@@ -120,13 +120,16 @@ interface LogEntry {
 ### Methods
 
 #### `constructor(opts: BatchTransportOptions)`
-Initializes a new BatchTransport instance with the specified options.
+Initializes a new BatchTransport instance with the specified options. Note that asynchronous initialization is handled by the `init` method.
+
+#### `init(): Promise<void>`
+Asynchronously initializes the transport, loading any backed-up logs. This method must be called after the constructor.
 
 #### `log(info: any, callback: () => void)`
 Adds a log entry to the queue. Called internally by Winston.
 
-#### `close()`
-Cleans up resources and ensures remaining logs are processed.
+#### `close(): Promise<void>`
+Asynchronously cleans up resources and ensures all pending logs are processed before shutdown.
 
 ## Error Handling
 
