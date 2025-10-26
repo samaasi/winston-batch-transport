@@ -222,22 +222,24 @@ describe('BatchTransport', () => {
   }, 15000);
   
   it('should compress logs when useCompression is true', async () => {
-    await transport.close();
-
-    transport = new BatchTransport({
+    const localTransport = new BatchTransport({
       apiUrl: mockApiUrl,
       batchSize: mockBatchSize,
       flushInterval: mockFlushInterval,
       useCompression: true,
       initialized: false,
+      retryInterval: mockRetryInterval,
+      backoffFactor: mockBackoffFactor,
     });
     mockedAxios.post.mockResolvedValue({ status: 200 }); 
     
-    await transport.init();
+    await localTransport.init(); 
 
     const callback = jest.fn();
-    transport.log({ level: 'info', message: 'Compressed log 1' }, callback);
-    transport.log({ level: 'info', message: 'Compressed log 2' }, callback); 
+    localTransport.log({ level: 'info', message: 'Compressed log 1' }, callback);
+    localTransport.log({ level: 'info', message: 'Compressed log 2' }, callback); 
+
+    await Promise.resolve();
 
     await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
 
@@ -253,6 +255,8 @@ describe('BatchTransport', () => {
       })
     );
     expect(callback).toHaveBeenCalledTimes(2);
+
+    await localTransport.close();
   });
 
   it('should ensure all logs are processed on close', async () => {
