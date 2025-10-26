@@ -4,7 +4,7 @@ A robust Winston transport that batches logs and sends them to a specified API e
 
 ## Features
 
-- Batch log processing with configurable batch size
+- Batch log processing with a configurable batch size
 - Automatic retry mechanism with exponential backoff
 - Concurrent batch processing support
 - Compression support for reduced network bandwidth
