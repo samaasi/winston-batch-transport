@@ -82,7 +82,7 @@ class BatchTransport extends TransportStream {
         this.logQueue.push(logEntry);
 
         if (this.initialized && this.logQueue.length >= this.batchSize) {
-            this.flushLogs();
+            queueMicrotask(() => this.flushLogs(true)); 
         }
 
         callback();
@@ -253,6 +253,9 @@ class BatchTransport extends TransportStream {
     }
 
     public async close() {
+        await this.flushLogs(true);
+        await this.retryFailedLogs(true);
+
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
@@ -268,9 +271,6 @@ class BatchTransport extends TransportStream {
             await Promise.resolve();
             safeguard++;
         }
-
-        await this.flushLogs(true);
-        await this.retryFailedLogs(true);
     }
 }
 
