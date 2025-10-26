@@ -1,10 +1,29 @@
 # Winston Batch Transport
 
+![build](https://github.com/OWNER/REPO/actions/workflows/build.yml/badge.svg)
+[![npm version](https://badge.fury.io/js/winston-batch-transport.svg)](https://badge.fury.io/js/winston-batch-transport)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
 A robust Winston transport that batches logs and sends them to a specified API endpoint with support for retries, compression, and concurrent batch processing.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration Options](#configuration-options)
+- [Advanced Usage](#advanced-usage)
+- [API Reference](#api-reference)
+- [Error Handling](#error-handling)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
-- Batch log processing with configurable batch size
+- Batch log processing with a configurable batch size
 - Automatic retry mechanism with exponential backoff
 - Concurrent batch processing support
 - Compression support for reduced network bandwidth
@@ -125,6 +144,23 @@ Initializes a new BatchTransport instance with the specified options. Note that 
 #### `init(): Promise<void>`
 Asynchronously initializes the transport, loading any backed-up logs. This method must be called after the constructor.
 
+**Example Usage:**
+
+```typescript
+const transport = new BatchTransport({
+  batchSize: 100,
+  flushInterval: 5000,
+  apiUrl: 'https://your-logging-api.com/logs'
+});
+
+async function initialize() {
+  await transport.init();
+  console.log('Batch transport initialized.');
+}
+
+initialize();
+```
+
 #### `log(info: any, callback: () => void)`
 Adds a log entry to the queue. Called internally by Winston.
 
@@ -178,14 +214,8 @@ The transport handles errors in multiple ways:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTE.md) for more details.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
