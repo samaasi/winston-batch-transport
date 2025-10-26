@@ -209,7 +209,8 @@ class BatchTransport extends TransportStream {
              }
              if (!success) {
                  for (const log of batch) {
-                     await this.backupFailedLog(log);
+                     //await this.backupFailedLog(log);
+                     this.retryQueue.push(...batch);
                  }
              }
          }
