@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "test": "jest"
+    "test": "jest",
+    "check": "tsc --noEmit"
   },
   "keywords": [
     "winston",
@@ -17,6 +18,11 @@
     "batch",
     "compression",
     "retry"
+  ],
+  "files": [
+    "dist/",    
+    "LICENSE",
+    "README.md"
   ],
   "author": "",
   "license": "MIT",
