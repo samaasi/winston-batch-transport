@@ -227,8 +227,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 Before submitting a pull request, please run the following checks to ensure your code is clean and the tests pass:
 
 ```bash
-npm run check
-npm test
+pnpm run check
+pnpm test
 ```
 
 ## License
