@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as zlib from 'zlib';
 import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
 import BatchTransport from '../src/index';
@@ -8,6 +9,12 @@ jest.mock('axios', () => ({
 }));
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 (mockedAxios as any).isAxiosError = (err: any) => err.isAxiosError === true;
+
+jest.mock('zlib', () => ({
+  gzip: jest.fn((data, callback) => {
+    callback(null, Buffer.from(data));
+  }),
+}));
 
 let mockFileContent: any[] = [];
 jest.mock("fs/promises", () => ({
