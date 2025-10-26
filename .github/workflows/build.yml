@@ -1,54 +1,50 @@
-name: Release and Publish to npm (pnpm)
+name: build 
 
 on:
   push:
     branches:
       - master
-  workflow_dispatch:
+  pull_request: {}
 
-jobs:
-  release-and-publish:
-    runs-on: ubuntu-latest
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+permissions: 
+  contents: read 
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          registry-url: https://registry.npmjs.org/
+jobs: 
+  test: 
+    name: Test on node ${{ matrix.node-version }} and ${{ matrix.os }} 
+    runs-on: ${{ matrix.os }} 
+    strategy: 
+      fail-fast: false 
+      matrix: 
+        node-version: [20.x, 22.x, 24.x] 
+        os: [ubuntu-latest, windows-latest, macos-latest] 
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+    steps: 
+    - uses: actions/checkout@v5 
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+    - name: Use Node.js ${{ matrix.node-version }} 
+      uses: actions/setup-node@v6 
+      with: 
+        cache: 'pnpm' 
+        node-version: ${{ matrix.node-version }} 
 
-      - name: Run tests
-        run: pnpm test
+    - name: pnpm install 
+      run: pnpm install --frozen-lockfile
 
-      - name: Build package
-        run: pnpm build
+    - name: pnpm test 
+      run: pnpm test 
 
-      - name: Get package version
-        id: package-version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+    - name: pnpm run check 
+      run: pnpm run check
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.package-version.outputs.version }}
-          name: "Release v${{ steps.package-version.outputs.version }}"
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to npm
-        run: pnpm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    - name: pnpm build
+      run: pnpm build
