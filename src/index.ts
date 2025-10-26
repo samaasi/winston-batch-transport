@@ -209,7 +209,6 @@ class BatchTransport extends TransportStream {
              }
              if (!success) {
                  for (const log of batch) {
-                     //await this.backupFailedLog(log);
                      this.retryQueue.push(...batch);
                  }
              }
@@ -262,8 +261,10 @@ class BatchTransport extends TransportStream {
             this.retryTimer = null;
         }
 
-        while (this.activeBatches > 0) {
-            await new Promise(resolve => setTimeout(resolve, 50));
+        let safeguard = 0;
+        while (this.activeBatches > 0 && safeguard < 100) {
+            await Promise.resolve();
+            safeguard++;
         }
 
         await this.flushLogs();

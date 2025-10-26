@@ -241,7 +241,7 @@ describe('BatchTransport', () => {
 
     await Promise.resolve();
 
-    await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
+    await jest.runOnlyPendingTimersAsync();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
     expect(mockedAxios.post).toHaveBeenCalledWith(
