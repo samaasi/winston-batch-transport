@@ -1,7 +1,7 @@
 {
   "name": "winston-batch-transport",
-  "version": "1.0.0",
-  "description": "A robust Winston transport that batches logs and sends them to a specified API endpoint with support for retries, compression, and concurrent batch processing",
+  "version": "1.0.2",
+  "description": "A robust Winston transport that batches logs and sends them to a specified API endpoint with support for retries, compression, and concurrent batch processing.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
