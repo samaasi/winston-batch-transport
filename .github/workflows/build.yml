@@ -1,31 +1,54 @@
-name: build 
- 
-on: [push, pull_request] 
- 
-permissions: 
-  contents: read 
- 
-jobs: 
-  test: 
-    name: Test on node ${{ matrix.node-version }} and ${{ matrix.os }} 
-    runs-on: ${{ matrix.os }} 
-    strategy: 
-      fail-fast: false 
-      matrix: 
-        node-version: [20.x, 22.x, 24.x] 
-        os: [ubuntu-latest, windows-latest, macos-latest] 
- 
-    steps: 
-    - uses: actions/checkout@v5 
-    - name: Use Node.js ${{ matrix.node-version }} 
-      uses: actions/setup-node@v6 
-      with: 
-        cache: 'npm' 
-        node-version: ${{ matrix.node-version }} 
-    # Use separate run commands so command status handled correctly on Windows 
-    - name: npm install 
-      run: npm ci 
-    - name: npm test 
-      run: npm test 
-    - name: npm run check 
-      run: npm run check
+name: Release and Publish to npm (pnpm)
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  release-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Get package version
+        id: package-version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.package-version.outputs.version }}
+          name: "Release v${{ steps.package-version.outputs.version }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        run: pnpm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

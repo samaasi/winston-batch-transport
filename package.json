@@ -4,6 +4,7 @@
   "description": "A robust Winston transport that batches logs and sends them to a specified API endpoint with support for retries, compression, and concurrent batch processing.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
