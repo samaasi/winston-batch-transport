@@ -239,8 +239,7 @@ describe('BatchTransport', () => {
     const callback = jest.fn();
     localTransport.log({ level: 'info', message: 'Compressed log 1' }, callback);
     localTransport.log({ level: 'info', message: 'Compressed log 2' }, callback); 
-
-    await Promise.resolve(); 
+ 
     await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
@@ -266,20 +265,19 @@ describe('BatchTransport', () => {
 
     transport.log({ level: 'info', message: 'Closing log 1' }, callback);
 
-    await Promise.resolve();
     await jest.advanceTimersByTimeAsync(mockFlushInterval + 50);
-    await jest.runAllTicks();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
     
     transport.log({ level: 'info', message: 'Closing log 2' }, callback);
-    
-    await jest.runAllTicks();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
 
-    await transport.close();
-    await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
+    const closePromise = transport.close();
+
+    await jest.runAllTicks();
+
+    await closePromise;
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     expect(mockedAxios.post).toHaveBeenLastCalledWith(
