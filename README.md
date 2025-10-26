@@ -1,6 +1,6 @@
 # Winston Batch Transport
 
-![build](https://github.com/OWNER/REPO/actions/workflows/build.yml/badge.svg)
+![build](https://github.com/samaasi/winston-batch-transport/actions/workflows/build.yml/badge.svg)
 [![npm version](https://badge.fury.io/js/winston-batch-transport.svg)](https://badge.fury.io/js/winston-batch-transport)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

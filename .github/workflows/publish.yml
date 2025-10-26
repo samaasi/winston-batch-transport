@@ -2,8 +2,8 @@ name: Release and Publish to npm (pnpm)
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 concurrency:
