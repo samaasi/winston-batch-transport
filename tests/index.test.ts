@@ -244,6 +244,8 @@ describe('BatchTransport', () => {
 
     await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
 
+    await new Promise(resolve => process.nextTick(resolve));
+
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
     expect(mockedAxios.post).toHaveBeenCalledWith(
       mockApiUrl,
