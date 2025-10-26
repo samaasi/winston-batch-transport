@@ -89,7 +89,7 @@ class BatchTransport extends TransportStream {
     }
 
     private startFlushTimer() {
-        this.flushTimer = setInterval(() => this.flushLogs(), this.flushInterval);
+        this.flushTimer = setInterval(() => this.flushLogs(false), this.flushInterval);
     }
 
     private startRetryTimer() {
@@ -113,7 +113,8 @@ class BatchTransport extends TransportStream {
         };
     }
 
-    private async flushLogs() {
+    private async flushLogs(isManual = false) {
+        if (!isManual && !this.flushTimer) return;
         if (this.logQueue.length === 0 || this.activeBatches >= this.maxConcurrentBatches) return;
 
         const batchSize = Math.min(this.batchSize, this.logQueue.length);
@@ -180,7 +181,8 @@ class BatchTransport extends TransportStream {
         }
     }
 
-     private async retryFailedLogs() {
+     private async retryFailedLogs(isManual = false) {
+         if (!isManual && !this.retryTimer) return;
          if (this.retryQueue.length === 0) return;
 
          const logsToRetry = [...this.retryQueue];
@@ -267,8 +269,8 @@ class BatchTransport extends TransportStream {
             safeguard++;
         }
 
-        await this.flushLogs();
-        await this.retryFailedLogs();
+        await this.flushLogs(true);
+        await this.retryFailedLogs(true);
     }
 }
 

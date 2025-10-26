@@ -61,7 +61,6 @@ describe('BatchTransport', () => {
     if (transport) {
       const closePromise = transport.close();
       
-      // Advance timers once to ensure all final flush/retry logic runs
       await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
       await closePromise;
     }
@@ -220,7 +219,6 @@ describe('BatchTransport', () => {
 
     expect(callback).toHaveBeenCalledTimes(2);
     
-    // Restore fake timers so afterEach doesn't fail
     jest.useFakeTimers({ doNotFake: ['nextTick'] });
   }, 15000);
   
@@ -242,8 +240,7 @@ describe('BatchTransport', () => {
     localTransport.log({ level: 'info', message: 'Compressed log 1' }, callback);
     localTransport.log({ level: 'info', message: 'Compressed log 2' }, callback); 
 
-    // FIX: Revert to the safer finite time advance (resolves infinite loop issue)
-    await Promise.resolve(); // Drain batch flush microtasks
+    await Promise.resolve(); 
     await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
@@ -268,24 +265,20 @@ describe('BatchTransport', () => {
     mockedAxios.post.mockResolvedValue({ status: 200 });
 
     transport.log({ level: 'info', message: 'Closing log 1' }, callback);
+
     await Promise.resolve();
-
     await jest.advanceTimersByTimeAsync(mockFlushInterval + 50);
-
-    // Ensure cleanup of the first log's successful post
     await jest.runAllTicks();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
     
     transport.log({ level: 'info', message: 'Closing log 2' }, callback);
     
-    // Ensure the second log does not immediately trigger a batch flush
     await jest.runAllTicks();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
 
     await transport.close();
-    
     await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
