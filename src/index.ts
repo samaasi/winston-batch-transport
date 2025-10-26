@@ -82,14 +82,14 @@ class BatchTransport extends TransportStream {
         this.logQueue.push(logEntry);
 
         if (this.initialized && this.logQueue.length >= this.batchSize) {
-            this.flushLogs();
+            queueMicrotask(() => this.flushLogs(true)); 
         }
 
         callback();
     }
 
     private startFlushTimer() {
-        this.flushTimer = setInterval(() => this.flushLogs(), this.flushInterval);
+        this.flushTimer = setInterval(() => this.flushLogs(false), this.flushInterval);
     }
 
     private startRetryTimer() {
@@ -113,7 +113,8 @@ class BatchTransport extends TransportStream {
         };
     }
 
-    private async flushLogs() {
+    private async flushLogs(isManual = false) {
+        if (!isManual && !this.flushTimer) return;
         if (this.logQueue.length === 0 || this.activeBatches >= this.maxConcurrentBatches) return;
 
         const batchSize = Math.min(this.batchSize, this.logQueue.length);
@@ -180,7 +181,8 @@ class BatchTransport extends TransportStream {
         }
     }
 
-     private async retryFailedLogs() {
+     private async retryFailedLogs(isManual = false) {
+         if (!isManual && !this.retryTimer) return;
          if (this.retryQueue.length === 0) return;
 
          const logsToRetry = [...this.retryQueue];
@@ -209,7 +211,6 @@ class BatchTransport extends TransportStream {
              }
              if (!success) {
                  for (const log of batch) {
-                     //await this.backupFailedLog(log);
                      this.retryQueue.push(...batch);
                  }
              }
@@ -252,6 +253,9 @@ class BatchTransport extends TransportStream {
     }
 
     public async close() {
+        await this.flushLogs(true);
+        await this.retryFailedLogs(true);
+
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
@@ -262,12 +266,11 @@ class BatchTransport extends TransportStream {
             this.retryTimer = null;
         }
 
-        while (this.activeBatches > 0) {
-            await new Promise(resolve => setTimeout(resolve, 50));
+        let safeguard = 0;
+        while (this.activeBatches > 0 && safeguard < 100) {
+            await Promise.resolve();
+            safeguard++;
         }
-
-        await this.flushLogs();
-        await this.retryFailedLogs();
     }
 }
 
