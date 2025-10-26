@@ -60,12 +60,11 @@ describe('BatchTransport', () => {
   afterEach(async () => {
     if (transport) {
       const closePromise = transport.close();
-
+      
       await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
       await closePromise;
     }
     
-    await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
     jest.useRealTimers(); 
   });
 
@@ -219,6 +218,8 @@ describe('BatchTransport', () => {
     expect(mockFileContent[1].message).toBe('Test log 2');
 
     expect(callback).toHaveBeenCalledTimes(2);
+    
+    jest.useFakeTimers({ doNotFake: ['nextTick'] });
   }, 15000);
   
   it('should compress logs when useCompression is true', async () => {
@@ -241,7 +242,7 @@ describe('BatchTransport', () => {
 
     await Promise.resolve();
 
-    await jest.runOnlyPendingTimersAsync();
+    await jest.advanceTimersByTimeAsync(JEST_TIMER_FLUSH_TIME);
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
     expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -265,6 +266,7 @@ describe('BatchTransport', () => {
     mockedAxios.post.mockResolvedValue({ status: 200 });
 
     transport.log({ level: 'info', message: 'Closing log 1' }, callback);
+    await Promise.resolve();
 
     await jest.advanceTimersByTimeAsync(mockFlushInterval + 50);
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
